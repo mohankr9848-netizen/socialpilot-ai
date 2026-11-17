@@ -101,3 +101,7 @@ This deterministic, offline approach can tailor topics to available information 
 5. Run `python -m pytest -q` to test the project.
 
 Fonts are loaded from the Streamlit Linux host when available; Pillow's fallback font is used if missing. For production typography consistency, install a redistributable font yourself (do not commit proprietary fonts).
+
+## Phase 4.1 — Creative Studio visual redesign
+
+Replace only `modules/creative_studio.py`, `README.md`, and `tests/test_creative_studio.py` in your existing GitHub repository. No new SQL, API keys, or dependency changes. The offline Pillow renderer now uses larger responsive typography, four distinct layouts, topic-aware network/finance/workflow diagrams, logo support, and full-resolution PNG export. Diagrams are rule-based illustrations, not generative AI artwork. Check all headlines and claims before publishing.

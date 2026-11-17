@@ -189,7 +189,12 @@ elif section == 'Website Research':
     except Exception:
         st.error('Research table unavailable. Run database/002_phase2.sql in Supabase SQL Editor first.')
         st.stop()
+
     stored = stored_rows[0] if stored_rows else None
+
+    if st.session_state.pop('research_saved_' + business_id, False):
+        st.success('Research profile saved successfully to Supabase!')
+
     draft = st.session_state.get('research_draft_' + business_id)
     if draft is None and stored:
         draft = {'website': stored['website'], 'facts': stored['facts'], 'suggestions': stored['suggestions'], 'warnings': stored.get('warnings') or []}

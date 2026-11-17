@@ -222,9 +222,9 @@ elif section == 'Website Research':
                     db.table('business_research').update(record).eq('id', stored['id']).eq('user_id', user_id).execute()
                 else:
                     db.table('business_research').insert(record).execute()
-                st.session_state.pop('research_draft_' + business_id, None)
-                st.success('Research profile saved.')
-                st.rerun()
+st.session_state.pop('research_draft_' + business_id, None)
+st.session_state['research_saved_' + business_id] = True
+st.rerun()
             except Exception as exc:
                 st.error(f'Could not save research profile: {exc}')
     else:

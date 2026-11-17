@@ -1,7 +1,7 @@
 from modules.content_planner import make_plan
 
 def test_deterministic_and_month_bounds():
-    b={'name':'Example','industry':'Software','colors':['#123456']}
+    b={'name':'Example','industry':'Software','colors':['#123456'], 'product_description':'Remote router provisioning and diagnostics'}
     a=make_plan(b,{},2026,2,['LinkedIn','Instagram'],3)
     assert a == make_plan(b,{},2026,2,['LinkedIn','Instagram'],3)
     assert len(a)==12

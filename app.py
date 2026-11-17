@@ -239,10 +239,10 @@ elif section == 'Content Calendar':
     import csv
     from datetime import date
     from io import StringIO
-    from modules.content_planner import make_plan, PLATFORMS
+    from modules.content_planner import make_plan, topic_sources, PLATFORMS
 
     st.subheader('Content Strategy & Monthly Calendar')
-    st.caption('Offline draft generator. Review every caption and prompt; posts are NOT automatically published or scheduled on social networks.')
+    st.caption('Business-aware offline planner: builds topics from your business details and approved website research. No AI API, automatic posting or invented product claims.')
     if not businesses:
         st.info('Create a business under Businesses first.')
         st.stop()
@@ -259,7 +259,7 @@ elif section == 'Content Calendar':
     frequency = st.slider('Posts per week (across all selected platforms)', 1, 7, 3)
     hour = st.selectbox('Draft posting hour (your intended local time)', list(range(24)), index=10, format_func=lambda h: f'{h:02d}:00')
     try:
-        research_rows = db.table('business_research').select('suggestions,approved').eq('business_id',business_id).eq('user_id',user_id).limit(1).execute().data
+        research_rows = db.table('business_research').select('suggestions,facts,approved').eq('business_id',business_id).eq('user_id',user_id).limit(1).execute().data
         research = research_rows[0] if research_rows and research_rows[0].get('approved') else None
     except Exception:
         research = None
@@ -267,6 +267,13 @@ elif section == 'Content Calendar':
         st.success('Using your approved Phase 2 research profile.')
     else:
         st.warning('No approved research profile found. Drafts will use saved business details only.')
+    sources = topic_sources(business, research)
+    st.markdown('#### Specific topics identified from your business')
+    if sources:
+        st.dataframe([{'Source': item['source'], 'Extracted topic': item['topic']} for item in sources], hide_index=True, use_container_width=True)
+        st.caption('Source phrases are planning inputs, not independently verified product claims. To improve topics, edit product positioning and content opportunities in Website Research.')
+    else:
+        st.warning('No specific topics found. Add detailed product features, use cases and customer problems in Businesses or approved Website Research before generating.')
     draft_key = f'calendar_drafts_{business_id}_{year}_{month}'
     if st.button('Generate monthly draft calendar', type='primary'):
         try:

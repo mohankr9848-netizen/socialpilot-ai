@@ -7,7 +7,7 @@ from modules.branding import extract_colors
 
 st.set_page_config(page_title='SocialPilot AI', page_icon='📅', layout='wide')
 st.title('SocialPilot AI')
-st.caption('Your free social media marketing workspace — Phase 1')
+st.caption('Your free social media marketing workspace — Phase 2')
 
 if not client():
     st.info('Connect Supabase to begin. See README.md for the exact setup steps.')
@@ -55,7 +55,7 @@ if 'access_token' not in st.session_state:
 
 with st.sidebar:
     st.success('Signed in')
-    section = st.radio('Navigation', ['Dashboard', 'Businesses', 'Settings'])
+    section = st.radio('Navigation', ['Dashboard', 'Businesses', 'Website Research', 'Settings'])
     if st.button('Log out'):
         st.session_state.clear()
         st.rerun()
@@ -153,6 +153,82 @@ elif section == 'Businesses':
                     st.rerun()
                 except Exception:
                     st.error('Could not delete business.')
+elif section == 'Website Research':
+    from modules.crawler import crawl_website
+    from modules.ai_provider import get_provider
+    st.subheader('Website Research & Business Intelligence')
+    st.caption('Read public website pages and create an editable research profile. Website claims must be reviewed before use.')
+    if not businesses:
+        st.info('Create a business under Businesses first.')
+        st.stop()
+    business_map = {b['id']: b for b in businesses}
+    business_id = st.selectbox('Choose business', list(business_map), format_func=lambda key: business_map[key]['name'])
+    business = business_map[business_id]
+    research_url = st.text_input('Website to research', value=business.get('website') or '', key='research_url_' + business_id)
+    max_pages = st.slider('Maximum pages to inspect', 1, 8, 4)
+    if st.button('Analyze Website', type='primary'):
+        if not research_url.strip():
+            st.error('Enter a public website URL. Add https:// at the beginning.')
+        else:
+            with st.spinner('Reading accessible public pages...'):
+                try:
+                    crawl = crawl_website(research_url, max_pages)
+                    report = get_provider().generate(business, crawl)
+                    st.session_state['research_draft_' + business_id] = {'website': research_url, **report}
+                    if not crawl['pages']:
+                        st.warning('No accessible pages found. You can still edit the research using the saved business details.')
+                    else:
+                        st.success(f"Read {len(crawl['pages'])} page(s). Review the report before saving.")
+                except Exception as exc:
+                    st.error(f'Website research could not complete: {exc}')
+                    st.info('You can use your existing business details by clicking Generate from saved business details below.')
+    if st.button('Generate from saved business details'):
+        st.session_state['research_draft_' + business_id] = {'website': research_url, **get_provider().generate(business, {'pages': [], 'warnings': ['No website pages were analyzed.']})}
+    try:
+        stored_rows = db.table('business_research').select('*').eq('business_id', business_id).eq('user_id', user_id).limit(1).execute().data
+    except Exception:
+        st.error('Research table unavailable. Run database/002_phase2.sql in Supabase SQL Editor first.')
+        st.stop()
+    stored = stored_rows[0] if stored_rows else None
+    draft = st.session_state.get('research_draft_' + business_id)
+    if draft is None and stored:
+        draft = {'website': stored['website'], 'facts': stored['facts'], 'suggestions': stored['suggestions'], 'warnings': stored.get('warnings') or []}
+    if draft:
+        st.markdown('#### Verified source material')
+        st.caption('These are extracted snippets and URLs, not independently verified claims. Check the source pages.')
+        facts = draft.get('facts', {})
+        st.write('Pages:', ', '.join(facts.get('source_urls', [])) or 'None (manual business profile only)')
+        with st.expander('Website headings, titles and descriptions'):
+            st.json(facts)
+        for warning in draft.get('warnings', []):
+            st.warning(str(warning))
+        st.markdown('#### Editable business intelligence profile')
+        st.caption('Draft suggestions are not verified facts. Edit and approve them before using them in future content.')
+        fields = [('business_overview', 'Business overview'), ('target_audience', 'Target audience'),
+                  ('product_positioning', 'Product positioning'), ('unique_selling_propositions', 'Unique selling propositions'),
+                  ('customer_pain_points', 'Customer pain points'), ('content_opportunities', 'Content opportunities'),
+                  ('content_pillars', 'Recommended content pillars'), ('social_strategy', 'Suggested social strategy')]
+        with st.form('research_edit_' + business_id):
+            edits = {}
+            for key, label in fields:
+                edits[key] = st.text_area(label, value=draft.get('suggestions', {}).get(key, ''), height=90)
+            approve = st.checkbox('I have reviewed this profile and approve it for future content planning', value=bool(stored and stored.get('approved')))
+            save_research = st.form_submit_button('Save research profile')
+        if save_research:
+            record = {'user_id': user_id, 'business_id': business_id, 'website': draft['website'],
+                      'facts': facts, 'suggestions': edits, 'warnings': draft.get('warnings', []), 'approved': approve}
+            try:
+                if stored:
+                    db.table('business_research').update(record).eq('id', stored['id']).eq('user_id', user_id).execute()
+                else:
+                    db.table('business_research').insert(record).execute()
+                st.session_state.pop('research_draft_' + business_id, None)
+                st.success('Research profile saved.')
+                st.rerun()
+            except Exception as exc:
+                st.error(f'Could not save research profile: {exc}')
+    else:
+        st.info('Choose a business and analyze its website, or generate a profile from saved business details.')
 else:
     st.subheader('Settings')
     st.write('Phase 1 uses Supabase authentication and private business records.')

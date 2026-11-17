@@ -1,0 +1,5 @@
+streamlit>=1.38,<2
+supabase>=2.7,<3
+Pillow>=10,<13
+python-dotenv>=1,<2
+pytest>=8,<10

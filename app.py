@@ -7,7 +7,7 @@ from modules.branding import extract_colors
 
 st.set_page_config(page_title='SocialPilot AI', page_icon='📅', layout='wide')
 st.title('SocialPilot AI')
-st.caption('Your free social media marketing workspace — Phase 3')
+st.caption('Your free social media marketing workspace — Phase 4')
 
 if not client():
     st.info('Connect Supabase to begin. See README.md for the exact setup steps.')
@@ -55,7 +55,7 @@ if 'access_token' not in st.session_state:
 
 with st.sidebar:
     st.success('Signed in')
-    section = st.radio('Navigation', ['Dashboard', 'Businesses', 'Website Research', 'Content Calendar', 'Settings'])
+    section = st.radio('Navigation', ['Dashboard', 'Businesses', 'Website Research', 'Content Calendar', 'Creative Studio', 'Settings'])
     if st.button('Log out'):
         st.session_state.clear()
         st.rerun()
@@ -73,7 +73,7 @@ if section == 'Dashboard':
     a, b, c = st.columns(3)
     a.metric('Businesses', len(businesses))
     b.metric('Posts', 'Open Content Calendar')
-    c.metric('Graphics', 'Coming in Phase 4')
+    c.metric('Graphics', 'Open Creative Studio')
     st.info('Open Businesses in the sidebar to create your first brand profile.')
 elif section == 'Businesses':
     st.subheader('Business profiles')
@@ -351,6 +351,50 @@ elif section == 'Content Calendar':
                 st.error(f'Delete failed: {exc}')
     else:
         st.info('No saved posts for this month yet. Generate drafts above and save them.')
+elif section == 'Creative Studio':
+    from modules.creative_studio import SIZES, TEMPLATES, render_post, design_prompt
+    st.subheader('Creative Studio — Branded Social Graphics')
+    st.caption('Generate template-based PNGs and copy detailed image prompts. No AI API, paid credits or automatic publishing.')
+    if not businesses:
+        st.info('Add a business under Businesses first.')
+        st.stop()
+    business_map = {item['id']: item for item in businesses}
+    business_id = st.selectbox('Business', list(business_map), format_func=lambda k: business_map[k]['name'], key='studio_business')
+    business = business_map[business_id]
+    try:
+        saved_posts = db.table('content_posts').select('*').eq('user_id', user_id).eq('business_id', business_id).order('scheduled_date', desc=True).limit(250).execute().data
+    except Exception as exc:
+        st.error(f'Could not load calendar posts: {exc}')
+        st.stop()
+    if not saved_posts:
+        st.info('Save at least one post in Content Calendar, then return to Creative Studio.')
+        st.stop()
+    post = st.selectbox('Choose a saved calendar post', saved_posts, format_func=lambda p: f"{p['scheduled_date']} · {p['platform']} · {p['title'][:70]}", key='studio_post')
+    left, right = st.columns(2)
+    with left:
+        template = st.selectbox('Design template', TEMPLATES)
+        size_label = st.selectbox('Graphic size', list(SIZES))
+    with right:
+        headline = st.text_area('Graphic headline', value=post.get('title') or '', height=100, key=f"studio_head_{post['id']}")
+        subtitle = st.text_input('Supporting line (optional)', value=post.get('content_pillar') or '', key=f"studio_sub_{post['id']}")
+    st.caption('Graphics are simple branded templates, not AI-generated illustrations. Review all claims before publishing.')
+    logo_bytes = None
+    if business.get('logo_path'):
+        try:
+            logo_bytes = db.storage.from_('brand-logos').download(business['logo_path'])
+        except Exception:
+            st.warning('Could not load your saved logo. The graphic will use the business name instead.')
+    try:
+        png = render_post(business, post, template, SIZES[size_label], logo_bytes, headline, subtitle)
+        st.image(png, caption=f'{template} · {size_label}', width=500)
+        st.download_button('Download graphic as PNG', png, file_name=f"socialpilot_{post['id'][:8]}_{SIZES[size_label][0]}x{SIZES[size_label][1]}.png", mime='image/png')
+    except Exception as exc:
+        st.error(f'Graphic rendering failed: {exc}')
+    prompt = design_prompt(business, post, template, SIZES[size_label], headline, subtitle)
+    st.markdown('#### Detailed image-generation prompt')
+    st.code(prompt, language=None)
+    st.download_button('Download design prompt as TXT', prompt.encode('utf-8'), file_name=f"socialpilot_prompt_{post['id'][:8]}.txt", mime='text/plain')
+    st.info('Phase 4 generates graphics on demand for download. Images are not stored in Supabase and are not scheduled or published.')
 else:
     st.subheader('Settings')
     st.write('Phase 1 uses Supabase authentication and private business records.')

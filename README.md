@@ -81,3 +81,13 @@ python -m pytest -q
 **Important:** Generation is a **deterministic, offline template-based drafting engine**, not an LLM. It uses approved Phase 2 research if available, otherwise saved business details. Content is a starting point, not fact-checked, and must be reviewed. Dates/times are draft planning fields only: nothing is connected to social media, published, or scheduled automatically. CSV is export, not direct Excel .xlsx. Repeated saves create additional posts; use the saved-post editor to manage duplicates. Graphics are prompts only; image creation comes in Phase 4. No paid API keys needed.
 
 **Tests:** `python -m pytest tests -q`. Keep your Streamlit Supabase secrets in Cloud Secrets, never in GitHub.
+
+## Phase 3 business-aware upgrade (no AI API)
+
+This version uses your saved business product description and **approved** Phase 2 research, including website headings, titles, descriptions, positioning, content opportunities and customer pain points. It prioritizes specific phrases over generic content pillars. The Content Calendar page shows exactly which source phrases were found.
+
+If you see **No specific product or website topics found**, open Businesses or Website Research and provide one product/feature/use-case per line, approve and save the research, then regenerate. Research is a planning input; review every generated claim before publishing.
+
+**Upgrade instructions:** Replace `app.py`, `modules/content_planner.py`, `README.md`, and `tests/test_content_planner.py`; add `tests/test_business_aware_planner.py`. Other files remain unchanged. **Do not run a new SQL migration**: the existing `database/003_phase3.sql` table is compatible. Existing saved posts are retained. New drafts are created only when you click Generate; saved posts are not automatically rewritten.
+
+This deterministic, offline approach can tailor topics to available information but cannot independently understand or verify product claims like a generative AI model. For best output, enter concise specific product features, pain points, and audience roles in the research profile.

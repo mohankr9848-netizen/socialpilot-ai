@@ -105,3 +105,25 @@ Fonts are loaded from the Streamlit Linux host when available; Pillow's fallback
 ## Phase 4.1 — Creative Studio visual redesign
 
 Replace only `modules/creative_studio.py`, `README.md`, and `tests/test_creative_studio.py` in your existing GitHub repository. No new SQL, API keys, or dependency changes. The offline Pillow renderer now uses larger responsive typography, four distinct layouts, topic-aware network/finance/workflow diagrams, logo support, and full-resolution PNG export. Diagrams are rule-based illustrations, not generative AI artwork. Check all headlines and claims before publishing.
+
+
+## Phase 4.2: Smart Creative Design Engine
+
+The Creative Studio now proposes a concise headline and supporting line for every saved post. You can edit either before generating. Four templates have larger typography, stronger topic-specific flat illustrations, brand colors and logo support. All rendering is offline with Pillow; no AI API, migration or new package required. Rules are intentionally conservative: check final copy before publication.
+
+## Phase 4.3 — Cloudflare Workers AI (optional, free tier)
+
+Creative Studio now offers **AI artwork (Cloudflare free tier)** and the original **Free vector template** fallback. AI generation uses `@cf/black-forest-labs/flux-1-schnell` via the Cloudflare REST API. It creates an illustration, while Pillow adds exact headlines and the original uploaded logo for better legibility and brand fidelity. The image is held only in the current Streamlit session; use the PNG download to save it.
+
+Add these to **Streamlit Community Cloud → App settings → Secrets** (keep your existing Supabase settings):
+
+```toml
+CLOUDFLARE_ACCOUNT_ID = "your-cloudflare-account-id"
+CLOUDFLARE_API_TOKEN = "your-workers-ai-api-token"
+```
+
+Do **not** commit real credentials to GitHub. Your Cloudflare token needs permission to run Workers AI. Keep the Cloudflare **Workers Free** plan; do not upgrade to Paid if your budget must remain ₹0. Cloudflare enforces its daily allowance; the app also has a modest **12 attempts per UTC day per browser session** guard, which is *not* a global quota. For the authoritative allowance and eligibility, consult Cloudflare's pricing dashboard: https://developers.cloudflare.com/workers-ai/platform/pricing/
+
+Select a saved post → Creative Studio → AI artwork → choose style → **Generate AI artwork** → review the composed branded preview → download PNG. On API errors, select the Free vector template. Regenerating uses another Cloudflare inference. No database migration is needed.
+
+For privacy, remember that prompts (business descriptions, post title, and creative brief) are sent to Cloudflare for generation. Avoid inserting confidential business details.

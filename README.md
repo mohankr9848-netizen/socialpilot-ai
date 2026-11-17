@@ -70,3 +70,14 @@ python -m pytest -q
 - For production deployment, consider egress-level blocking of private networks and DNS rebinding defenses in addition to application checks.
 - Research is private per user via Supabase RLS. All extracted text is treated as untrusted and should be reviewed.
 - Existing Phase 1 business records are preserved. Phase 3 will consume the approved research profiles.
+
+
+## Phase 3 — Content Strategy & Monthly Calendar
+
+**Install:** Upload/replace the project files in your existing GitHub repository, preserving paths. In your EXISTING Supabase project, run `database/003_phase3.sql` in SQL Editor once. Streamlit Cloud will redeploy from `main`. Your existing Secrets remain unchanged. Do not rerun Phase 1/2 migrations or delete existing tables.
+
+**Use:** Log in → Content Calendar → choose business and month → choose platforms and posts/week → Generate monthly draft calendar → review → Save all drafts to Supabase. You can edit/approve/delete saved posts and download a UTF-8 CSV (Excel-compatible).
+
+**Important:** Generation is a **deterministic, offline template-based drafting engine**, not an LLM. It uses approved Phase 2 research if available, otherwise saved business details. Content is a starting point, not fact-checked, and must be reviewed. Dates/times are draft planning fields only: nothing is connected to social media, published, or scheduled automatically. CSV is export, not direct Excel .xlsx. Repeated saves create additional posts; use the saved-post editor to manage duplicates. Graphics are prompts only; image creation comes in Phase 4. No paid API keys needed.
+
+**Tests:** `python -m pytest tests -q`. Keep your Streamlit Supabase secrets in Cloud Secrets, never in GitHub.

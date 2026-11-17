@@ -7,7 +7,7 @@ from modules.branding import extract_colors
 
 st.set_page_config(page_title='SocialPilot AI', page_icon='📅', layout='wide')
 st.title('SocialPilot AI')
-st.caption('Your free social media marketing workspace — Phase 2')
+st.caption('Your free social media marketing workspace — Phase 3')
 
 if not client():
     st.info('Connect Supabase to begin. See README.md for the exact setup steps.')
@@ -55,7 +55,7 @@ if 'access_token' not in st.session_state:
 
 with st.sidebar:
     st.success('Signed in')
-    section = st.radio('Navigation', ['Dashboard', 'Businesses', 'Website Research', 'Settings'])
+    section = st.radio('Navigation', ['Dashboard', 'Businesses', 'Website Research', 'Content Calendar', 'Settings'])
     if st.button('Log out'):
         st.session_state.clear()
         st.rerun()
@@ -72,7 +72,7 @@ if section == 'Dashboard':
     st.subheader('Overview')
     a, b, c = st.columns(3)
     a.metric('Businesses', len(businesses))
-    b.metric('Posts', 'Coming in Phase 3')
+    b.metric('Posts', 'Open Content Calendar')
     c.metric('Graphics', 'Coming in Phase 4')
     st.info('Open Businesses in the sidebar to create your first brand profile.')
 elif section == 'Businesses':
@@ -234,6 +234,116 @@ elif section == 'Website Research':
                 st.error(f'Could not save research profile: {exc}')
     else:
         st.info('Choose a business and analyze its website, or generate a profile from saved business details.')
+elif section == 'Content Calendar':
+    import calendar
+    import csv
+    from datetime import date
+    from io import StringIO
+    from modules.content_planner import make_plan, PLATFORMS
+
+    st.subheader('Content Strategy & Monthly Calendar')
+    st.caption('Offline draft generator. Review every caption and prompt; posts are NOT automatically published or scheduled on social networks.')
+    if not businesses:
+        st.info('Create a business under Businesses first.')
+        st.stop()
+    business_map = {b['id']: b for b in businesses}
+    business_id = st.selectbox('Business', list(business_map), format_func=lambda k: business_map[k]['name'], key='calendar_business')
+    business = business_map[business_id]
+    today = date.today()
+    a, b = st.columns(2)
+    with a:
+        year = st.number_input('Year', min_value=2025, max_value=2100, value=today.year, step=1)
+    with b:
+        month = st.selectbox('Month', list(range(1,13)), index=today.month-1, format_func=lambda m: calendar.month_name[m])
+    platforms = st.multiselect('Platforms', list(PLATFORMS), default=['LinkedIn','Instagram','Facebook'])
+    frequency = st.slider('Posts per week (across all selected platforms)', 1, 7, 3)
+    hour = st.selectbox('Draft posting hour (your intended local time)', list(range(24)), index=10, format_func=lambda h: f'{h:02d}:00')
+    try:
+        research_rows = db.table('business_research').select('suggestions,approved').eq('business_id',business_id).eq('user_id',user_id).limit(1).execute().data
+        research = research_rows[0] if research_rows and research_rows[0].get('approved') else None
+    except Exception:
+        research = None
+    if research:
+        st.success('Using your approved Phase 2 research profile.')
+    else:
+        st.warning('No approved research profile found. Drafts will use saved business details only.')
+    draft_key = f'calendar_drafts_{business_id}_{year}_{month}'
+    if st.button('Generate monthly draft calendar', type='primary'):
+        try:
+            st.session_state[draft_key] = make_plan(business, research, int(year), int(month), platforms, frequency, hour)
+            st.success('Draft calendar generated. Review before saving.')
+        except Exception as exc:
+            st.error(f'Could not generate drafts: {exc}')
+    drafts = st.session_state.get(draft_key, [])
+    if drafts:
+        st.markdown('#### Generated drafts (not saved yet)')
+        st.dataframe([{'Date':p['scheduled_date'],'Platform':p['platform'],'Topic':p['title'],'Format':p['content_type']} for p in drafts], hide_index=True, use_container_width=True)
+        with st.expander('Review and edit generated drafts', expanded=False):
+            for i, p in enumerate(drafts):
+                with st.form(f'draft_edit_{business_id}_{year}_{month}_{i}'):
+                    st.markdown(f"**{p['scheduled_date']} · {p['platform']}**")
+                    title = st.text_input('Title', p['title'])
+                    caption = st.text_area('Caption', p['caption'])
+                    hashtags = st.text_input('Hashtags', p['hashtags'])
+                    graphic_prompt = st.text_area('Graphic design prompt', p['graphic_prompt'])
+                    if st.form_submit_button('Apply changes to this draft'):
+                        p.update(title=title,caption=caption,hashtags=hashtags,graphic_prompt=graphic_prompt)
+                        st.success('Draft updated locally.')
+        if st.button('Save all drafts to Supabase'):
+            try:
+                records = [{'user_id':user_id,'business_id':business_id,**p} for p in drafts]
+                db.table('content_posts').insert(records).execute()
+                st.session_state.pop(draft_key,None)
+                st.session_state['calendar_saved_notice'] = True
+                st.rerun()
+            except Exception as exc:
+                st.error(f'Could not save calendar. Run database/003_phase3.sql first. Details: {exc}')
+    if st.session_state.pop('calendar_saved_notice',False):
+        st.success('Calendar drafts saved to Supabase!')
+    try:
+        start = f'{int(year):04d}-{int(month):02d}-01'
+        end = f'{int(year)+1:04d}-01-01' if int(month)==12 else f'{int(year):04d}-{int(month)+1:02d}-01'
+        posts = db.table('content_posts').select('*').eq('user_id',user_id).eq('business_id',business_id).gte('scheduled_date',start).lt('scheduled_date',end).order('scheduled_date').execute().data
+    except Exception as exc:
+        st.error(f'Content calendar table unavailable. Run database/003_phase3.sql. Details: {exc}')
+        st.stop()
+    st.markdown(f'#### Saved posts — {calendar.month_name[int(month)]} {year} ({len(posts)})')
+    if posts:
+        st.dataframe([{'Date':p['scheduled_date'],'Time':p['scheduled_time'],'Platform':p['platform'],'Title':p['title'],'Status':p['status']} for p in posts], hide_index=True, use_container_width=True)
+        csv_fields = ['scheduled_date','scheduled_time','platform','content_type','content_pillar','category','title','caption','hashtags','cta','graphic_prompt','status']
+        stream = StringIO()
+        writer = csv.DictWriter(stream, fieldnames=csv_fields)
+        writer.writeheader()
+        for p in posts:
+            writer.writerow({k:p.get(k,'') for k in csv_fields})
+        st.download_button('Download saved posts as CSV', stream.getvalue().encode('utf-8-sig'), file_name=f'content_calendar_{year}_{int(month):02d}.csv', mime='text/csv')
+        st.markdown('#### Edit, approve or delete a saved post')
+        selected = st.selectbox('Choose a post', posts, format_func=lambda p:f"{p['scheduled_date']} | {p['platform']} | {p['title'][:65]}")
+        with st.form('edit_saved_post'):
+            title = st.text_input('Title', selected['title'])
+            caption = st.text_area('Caption', selected['caption'],height=160)
+            hashtags = st.text_input('Hashtags', selected['hashtags'])
+            prompt = st.text_area('Graphic prompt', selected['graphic_prompt'],height=130)
+            status = st.selectbox('Review status', ['draft','approved'],index=1 if selected['status']=='approved' else 0)
+            update = st.form_submit_button('Save post changes')
+        if update:
+            try:
+                db.table('content_posts').update({'title':title,'caption':caption,'hashtags':hashtags,'graphic_prompt':prompt,'status':status}).eq('id',selected['id']).eq('user_id',user_id).eq('business_id',business_id).execute()
+                st.session_state['calendar_updated_notice'] = True
+                st.rerun()
+            except Exception as exc:
+                st.error(f'Update failed: {exc}')
+        if st.session_state.pop('calendar_updated_notice',False):
+            st.success('Saved post updated.')
+        confirm_delete = st.checkbox('Confirm deletion of selected saved post')
+        if st.button('Delete selected post',disabled=not confirm_delete):
+            try:
+                db.table('content_posts').delete().eq('id',selected['id']).eq('user_id',user_id).eq('business_id',business_id).execute()
+                st.rerun()
+            except Exception as exc:
+                st.error(f'Delete failed: {exc}')
+    else:
+        st.info('No saved posts for this month yet. Generate drafts above and save them.')
 else:
     st.subheader('Settings')
     st.write('Phase 1 uses Supabase authentication and private business records.')

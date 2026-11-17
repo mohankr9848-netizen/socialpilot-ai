@@ -50,3 +50,23 @@ python -m pytest -q
 - [ ] Monthly content generation
 - [ ] Branded graphics and ZIP exports
 - [ ] Social OAuth and scheduled publishing
+
+## Phase 2: Website Research (upgrade from your working Phase 1)
+
+**Before upgrading:** Keep your current Streamlit secrets as-is. Never upload secrets or a `venv` folder to GitHub. Back up your existing repository first.
+
+1. In Supabase open your existing `socialpilot-ai` project → **SQL Editor → New query**.
+2. Paste **all** of `database/002_phase2.sql` and click **Run**. Expect `Success. No rows returned`.
+3. In GitHub, upload the Phase 2 project files **into the root of your existing `socialpilot-ai` repository**, preserving folders and replacing existing files. Do not create a nested `socialpilot-ai` folder. Upload **only** files in this ZIP (do not upload a Python `venv` directory). Commit to `main`.
+4. Streamlit Community Cloud will redeploy after the commit. If necessary use **Manage app → Reboot app**.
+5. Sign in → **Website Research** → select a business → enter a public website with `https://` → **Analyze Website**.
+6. Check extracted website headings and source URLs. Edit the research fields, check approval, then **Save research profile**.
+7. If crawling fails, click **Generate from saved business details** and manually edit the profile.
+
+### Scope and limitations
+- Free rule-based analysis works without an external AI API. `modules/ai_provider.py` defines a provider interface; this release does **not** run an LLM or generate novel AI content.
+- Crawler respects robots.txt, limits pages and bytes, and rejects private/reserved hostname resolutions. Only analyze websites you are permitted to access. Public pages can block automated traffic.
+- Some sites render content in JavaScript; this crawler cannot read content that only appears after browser execution.
+- For production deployment, consider egress-level blocking of private networks and DNS rebinding defenses in addition to application checks.
+- Research is private per user via Supabase RLS. All extracted text is treated as untrusted and should be reviewed.
+- Existing Phase 1 business records are preserved. Phase 3 will consume the approved research profiles.

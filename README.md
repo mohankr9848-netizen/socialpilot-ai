@@ -91,3 +91,13 @@ If you see **No specific product or website topics found**, open Businesses or W
 **Upgrade instructions:** Replace `app.py`, `modules/content_planner.py`, `README.md`, and `tests/test_content_planner.py`; add `tests/test_business_aware_planner.py`. Other files remain unchanged. **Do not run a new SQL migration**: the existing `database/003_phase3.sql` table is compatible. Existing saved posts are retained. New drafts are created only when you click Generate; saved posts are not automatically rewritten.
 
 This deterministic, offline approach can tailor topics to available information but cannot independently understand or verify product claims like a generative AI model. For best output, enter concise specific product features, pain points, and audience roles in the research profile.
+
+## Phase 4 — Creative Studio (no paid API)
+
+1. Upload the updated `app.py`, `modules/creative_studio.py`, `tests/test_creative_studio.py`, and `README.md` to GitHub, preserving paths.
+2. Streamlit redeploys automatically. **No new Supabase SQL is required**; this phase reads existing `businesses` and `content_posts` records and the existing private `brand-logos` bucket.
+3. Sign in, open **Creative Studio**, choose a business and a previously saved calendar post, choose a template and canvas size, edit the graphic headline, then download the PNG or design prompt.
+4. Four offline templates and four canvas sizes are available. Generated graphics are not stored in Supabase, and the app does not generate photorealistic AI art or publish to social networks.
+5. Run `python -m pytest -q` to test the project.
+
+Fonts are loaded from the Streamlit Linux host when available; Pillow's fallback font is used if missing. For production typography consistency, install a redistributable font yourself (do not commit proprietary fonts).

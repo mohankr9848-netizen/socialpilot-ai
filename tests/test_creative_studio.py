@@ -30,3 +30,15 @@ def test_brand_fallback():
 def test_prompt_grounded():
     prompt = design_prompt(B, P, TEMPLATES[0], (1080, 1080))
     assert 'ISP owners' in prompt and P['title'] in prompt
+
+def test_nonblank_illustrated_designs():
+    for template in TEMPLATES:
+        raw = render_post(B, P, template, (1080,1080))
+        im = Image.open(BytesIO(raw)).convert('RGB')
+        assert len(im.getcolors(maxcolors=1000000) or []) > 20
+        assert sum(im.getpixel((x,y)) != (255,255,255) for x in range(100,1000,50) for y in range(100,950,50)) > 30
+
+def test_custom_text_and_topic_types():
+    for topic in ('Fiber network monitoring', 'Billing revenue performance', 'Project workflow management'):
+        raw = render_post(B, {'title':topic,'caption':topic}, headline=topic, template='Feature spotlight')
+        assert Image.open(BytesIO(raw)).size == (1080,1080)

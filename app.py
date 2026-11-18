@@ -7,7 +7,7 @@ from modules.branding import extract_colors
 
 st.set_page_config(page_title='SocialPilot AI', page_icon='📅', layout='wide')
 st.title('SocialPilot AI')
-st.caption('Your free social media marketing workspace — Phase 4.3')
+st.caption('Your free social media marketing workspace — Phase 4.5')
 
 if not client():
     st.info('Connect Supabase to begin. See README.md for the exact setup steps.')
@@ -76,7 +76,9 @@ if section == 'Dashboard':
     c.metric('Graphics', 'Open Creative Studio')
     st.info('Open Businesses in the sidebar to create your first brand profile.')
 elif section == 'Businesses':
+    from modules.product_intelligence import parse_product_lines
     st.subheader('Business profiles')
+    st.caption('After creating a business, expand its profile to add any number of product/service URLs.')
     with st.expander('Add a new business', expanded=not bool(businesses)):
         with st.form('new_business'):
             name = st.text_input('Business name')
@@ -137,6 +139,31 @@ elif section == 'Businesses':
                         st.rerun()
                 except Exception:
                     st.error('Could not update business.')
+            st.markdown('#### Product and service URLs')
+            st.caption('One per line: Product name | https://example.com/product . You can add more URLs at any time.')
+            url_lines = st.text_area('Add product/service URLs', key='product_urls_' + item['id'], placeholder='IconRadius | https://example.com/iconradius\nIconACS | https://example.com/iconacs', height=105)
+            if st.button('Add product/service URLs', key='add_product_urls_' + item['id']):
+                try:
+                    entries = parse_product_lines(url_lines)
+                    existing = db.table('business_products').select('url').eq('business_id',item['id']).eq('user_id',user_id).execute().data
+                    existing_urls = {r['url'].rstrip('/').casefold() for r in existing}
+                    records = [{'user_id':user_id,'business_id':item['id'], **e} for e in entries if e['url'].rstrip('/').casefold() not in existing_urls]
+                    if records:
+                        db.table('business_products').insert(records).execute()
+                    st.success(f'Added {len(records)} new product/service URLs.')
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f'Could not add URLs: {exc}. Run database/004_phase45.sql first.')
+            try:
+                product_rows = db.table('business_products').select('*').eq('business_id',item['id']).eq('user_id',user_id).order('created_at').execute().data
+                for pr in product_rows:
+                    cols = st.columns([4,1])
+                    cols[0].write(f"**{pr['name']}** — {pr['url']}")
+                    if cols[1].button('Remove', key='rmprod_'+pr['id']):
+                        db.table('business_products').delete().eq('id',pr['id']).eq('user_id',user_id).execute()
+                        st.rerun()
+            except Exception:
+                st.info('Product URL storage will be available after running database/004_phase45.sql.')
             if item.get('logo_path'):
                 try:
                     data = db.storage.from_('brand-logos').download(item['logo_path'])
@@ -182,6 +209,39 @@ elif section == 'Website Research':
                 except Exception as exc:
                     st.error(f'Website research could not complete: {exc}')
                     st.info('You can use your existing business details by clicking Generate from saved business details below.')
+    st.markdown('#### Product and service page research')
+    st.caption('Crawl one selected product URL at a time (one public HTML page). Review extracted information before approving it for calendar topics.')
+    try:
+        product_rows = db.table('business_products').select('*').eq('business_id',business_id).eq('user_id',user_id).order('created_at').execute().data
+    except Exception:
+        product_rows = []
+        st.warning('Product research requires database/004_phase45.sql in Supabase.')
+    if product_rows:
+        selected_product = st.selectbox('Product/service to analyze', product_rows, format_func=lambda p: f"{p['name']} — {p['url']}", key='research_product')
+        if st.button('Analyze selected product page'):
+            from modules.product_intelligence import crawl_product
+            try:
+                with st.spinner('Reading the public product page...'):
+                    facts = crawl_product(selected_product)
+                    db.table('business_products').update({'facts': facts, 'approved': False}).eq('id',selected_product['id']).eq('user_id',user_id).execute()
+                st.success('Product page analyzed. Review the extracted facts below and approve separately.')
+                st.rerun()
+            except Exception as exc:
+                st.error(f'Could not analyze product URL: {exc}')
+        facts = selected_product.get('facts') or {}
+        if facts:
+            st.write('Extracted source:', facts.get('source_url') or selected_product['url'])
+            st.write('Page title:', facts.get('title') or '(not found)')
+            st.write('Description:', facts.get('description') or '(not found)')
+            st.write('Headings:', facts.get('headings') or [])
+            for warning in facts.get('warnings', []):
+                st.warning(warning)
+            if st.button('Approve this product research for content planning', key='approve_prod_'+selected_product['id'], disabled=not bool(facts.get('source_url'))):
+                db.table('business_products').update({'approved':True}).eq('id',selected_product['id']).eq('user_id',user_id).execute()
+                st.success('Product research approved.')
+                st.rerun()
+            if selected_product.get('approved'):
+                st.success('This product research is approved for calendar topics.')
     if st.button('Generate from saved business details'):
         st.session_state['research_draft_' + business_id] = {'website': research_url, **get_provider().generate(business, {'pages': [], 'warnings': ['No website pages were analyzed.']})}
     try:
@@ -239,7 +299,7 @@ elif section == 'Content Calendar':
     import csv
     from datetime import date
     from io import StringIO
-    from modules.content_planner import make_plan, topic_sources, PLATFORMS
+    from modules.content_planner import make_plan, topic_sources, PLATFORMS, FORMATS
 
     st.subheader('Content Strategy & Monthly Calendar')
     st.caption('Business-aware offline planner: builds topics from your business details and approved website research. No AI API, automatic posting or invented product claims.')
@@ -257,6 +317,7 @@ elif section == 'Content Calendar':
         month = st.selectbox('Month', list(range(1,13)), index=today.month-1, format_func=lambda m: calendar.month_name[m])
     platforms = st.multiselect('Platforms', list(PLATFORMS), default=['LinkedIn','Instagram','Facebook'])
     frequency = st.slider('Posts per week (across all selected platforms)', 1, 7, 3)
+    selected_formats = st.multiselect('Content formats to include', list(FORMATS), default=list(FORMATS), help='Mix videos, carousels, infographics, polls, text posts and more.')
     hour = st.selectbox('Draft posting hour (your intended local time)', list(range(24)), index=10, format_func=lambda h: f'{h:02d}:00')
     try:
         research_rows = db.table('business_research').select('suggestions,facts,approved').eq('business_id',business_id).eq('user_id',user_id).limit(1).execute().data
@@ -267,7 +328,13 @@ elif section == 'Content Calendar':
         st.success('Using your approved Phase 2 research profile.')
     else:
         st.warning('No approved research profile found. Drafts will use saved business details only.')
-    sources = topic_sources(business, research)
+    try:
+        approved_products = db.table('business_products').select('*').eq('business_id',business_id).eq('user_id',user_id).eq('approved',True).execute().data
+    except Exception:
+        approved_products = []
+    if approved_products:
+        st.success(f'Using {len(approved_products)} approved product/service research profiles.')
+    sources = topic_sources(business, research, products=approved_products)
     st.markdown('#### Specific topics identified from your business')
     if sources:
         st.dataframe([{'Source': item['source'], 'Extracted topic': item['topic']} for item in sources], hide_index=True, use_container_width=True)
@@ -277,14 +344,14 @@ elif section == 'Content Calendar':
     draft_key = f'calendar_drafts_{business_id}_{year}_{month}'
     if st.button('Generate monthly draft calendar', type='primary'):
         try:
-            st.session_state[draft_key] = make_plan(business, research, int(year), int(month), platforms, frequency, hour)
+            st.session_state[draft_key] = make_plan(business, research, int(year), int(month), platforms, frequency, hour, products=approved_products, selected_formats=selected_formats)
             st.success('Draft calendar generated. Review before saving.')
         except Exception as exc:
             st.error(f'Could not generate drafts: {exc}')
     drafts = st.session_state.get(draft_key, [])
     if drafts:
         st.markdown('#### Generated drafts (not saved yet)')
-        st.dataframe([{'Date':p['scheduled_date'],'Platform':p['platform'],'Topic':p['title'],'Format':p['content_type']} for p in drafts], hide_index=True, use_container_width=True)
+        st.dataframe([{'Date':p['scheduled_date'],'Platform':p['platform'],'Topic':p['title'],'Format':p['content_type'], 'Product':(p.get('content_brief') or {}).get('product','')} for p in drafts], hide_index=True, use_container_width=True)
         with st.expander('Review and edit generated drafts', expanded=False):
             for i, p in enumerate(drafts):
                 with st.form(f'draft_edit_{business_id}_{year}_{month}_{i}'):
@@ -292,10 +359,18 @@ elif section == 'Content Calendar':
                     title = st.text_input('Title', p['title'])
                     caption = st.text_area('Caption', p['caption'])
                     hashtags = st.text_input('Hashtags', p['hashtags'])
-                    graphic_prompt = st.text_area('Graphic design prompt', p['graphic_prompt'])
+                    graphic_prompt = st.text_area('Visual / production prompt', p['graphic_prompt'])
+                    import json
+                    brief_input = st.text_area('Production brief (editable JSON)', json.dumps(p.get('content_brief') or {}, indent=2), height=210)
                     if st.form_submit_button('Apply changes to this draft'):
-                        p.update(title=title,caption=caption,hashtags=hashtags,graphic_prompt=graphic_prompt)
-                        st.success('Draft updated locally.')
+                        try:
+                            parsed_brief = json.loads(brief_input)
+                            if not isinstance(parsed_brief, dict):
+                                raise ValueError('Brief must be a JSON object')
+                            p.update(title=title,caption=caption,hashtags=hashtags,graphic_prompt=graphic_prompt,content_brief=parsed_brief)
+                            st.success('Draft updated locally.')
+                        except (ValueError, TypeError) as exc:
+                            st.error(f'Invalid production brief JSON: {exc}')
         if st.button('Save all drafts to Supabase'):
             try:
                 records = [{'user_id':user_id,'business_id':business_id,**p} for p in drafts]
@@ -316,26 +391,34 @@ elif section == 'Content Calendar':
         st.stop()
     st.markdown(f'#### Saved posts — {calendar.month_name[int(month)]} {year} ({len(posts)})')
     if posts:
-        st.dataframe([{'Date':p['scheduled_date'],'Time':p['scheduled_time'],'Platform':p['platform'],'Title':p['title'],'Status':p['status']} for p in posts], hide_index=True, use_container_width=True)
-        csv_fields = ['scheduled_date','scheduled_time','platform','content_type','content_pillar','category','title','caption','hashtags','cta','graphic_prompt','status']
+        st.dataframe([{'Date':p['scheduled_date'],'Time':p['scheduled_time'],'Platform':p['platform'],'Format':p['content_type'],'Title':p['title'],'Status':p['status']} for p in posts], hide_index=True, use_container_width=True)
+        csv_fields = ['scheduled_date','scheduled_time','platform','content_type','content_pillar','category','title','caption','hashtags','cta','graphic_prompt','content_brief','status']
         stream = StringIO()
         writer = csv.DictWriter(stream, fieldnames=csv_fields)
         writer.writeheader()
         for p in posts:
-            writer.writerow({k:p.get(k,'') for k in csv_fields})
+            import json
+            writer.writerow({k:(json.dumps(p.get(k) or {}, ensure_ascii=False) if k=='content_brief' else p.get(k,'')) for k in csv_fields})
         st.download_button('Download saved posts as CSV', stream.getvalue().encode('utf-8-sig'), file_name=f'content_calendar_{year}_{int(month):02d}.csv', mime='text/csv')
         st.markdown('#### Edit, approve or delete a saved post')
         selected = st.selectbox('Choose a post', posts, format_func=lambda p:f"{p['scheduled_date']} | {p['platform']} | {p['title'][:65]}")
+        st.markdown('#### Production brief for selected post')
+        st.json(selected.get('content_brief') or {})
         with st.form('edit_saved_post'):
             title = st.text_input('Title', selected['title'])
             caption = st.text_area('Caption', selected['caption'],height=160)
             hashtags = st.text_input('Hashtags', selected['hashtags'])
-            prompt = st.text_area('Graphic prompt', selected['graphic_prompt'],height=130)
+            prompt = st.text_area('Visual / production prompt', selected['graphic_prompt'],height=130)
+            import json
+            brief_json = st.text_area('Editable production brief (JSON)', json.dumps(selected.get('content_brief') or {}, indent=2), height=240)
             status = st.selectbox('Review status', ['draft','approved'],index=1 if selected['status']=='approved' else 0)
             update = st.form_submit_button('Save post changes')
         if update:
             try:
-                db.table('content_posts').update({'title':title,'caption':caption,'hashtags':hashtags,'graphic_prompt':prompt,'status':status}).eq('id',selected['id']).eq('user_id',user_id).eq('business_id',business_id).execute()
+                parsed_brief = json.loads(brief_json)
+                if not isinstance(parsed_brief, dict):
+                    raise ValueError('Production brief must be a JSON object')
+                db.table('content_posts').update({'title':title,'caption':caption,'hashtags':hashtags,'graphic_prompt':prompt,'content_brief':parsed_brief,'status':status}).eq('id',selected['id']).eq('user_id',user_id).eq('business_id',business_id).execute()
                 st.session_state['calendar_updated_notice'] = True
                 st.rerun()
             except Exception as exc:

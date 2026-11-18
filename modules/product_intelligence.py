@@ -43,14 +43,22 @@ def crawl_product(product):
 
 
 def product_topics(products):
+    """Return source-attributed candidate phrases; final relevance filtering is in planner."""
     result = []
     for product in products:
         if not product.get('approved'):
             continue
         facts = product.get('facts') or {}
-        name = product.get('name', '')
-        for phrase in [facts.get('title', ''), facts.get('description', '')] + facts.get('headings', []):
-            phrase = re.sub(r'\s+', ' ', str(phrase)).strip()
-            if 8 <= len(phrase) <= 135 and phrase.casefold() not in ('features', 'benefits', 'overview', 'contact us', 'learn more'):
-                result.append({'topic': phrase, 'source': f'Approved product: {name}', 'product': name, 'source_url': facts.get('source_url') or product.get('url', '')})
+        name = str(product.get('name') or '').strip()
+        raw = list(facts.get('headings') or []) + [facts.get('title', '')]
+        # Descriptions are often SEO paragraphs; only use short, complete sentences.
+        raw += re.split(r'(?<=[.!?])\s+', str(facts.get('description') or ''))
+        seen = set()
+        for phrase in raw:
+            phrase = re.sub(r'\s+', ' ', str(phrase)).strip(' .:-')
+            key = phrase.casefold()
+            if 8 <= len(phrase) <= 125 and key not in seen:
+                seen.add(key)
+                result.append({'topic': phrase, 'source': f'Approved product: {name}',
+                               'product': name, 'source_url': facts.get('source_url') or product.get('url', '')})
     return result

@@ -127,3 +127,19 @@ Do **not** commit real credentials to GitHub. Your Cloudflare token needs permis
 Select a saved post → Creative Studio → AI artwork → choose style → **Generate AI artwork** → review the composed branded preview → download PNG. On API errors, select the Free vector template. Regenerating uses another Cloudflare inference. No database migration is needed.
 
 For privacy, remember that prompts (business descriptions, post title, and creative brief) are sent to Cloudflare for generation. Avoid inserting confidential business details.
+
+---
+
+## Phase 4.5 — Product intelligence and multi-format content calendar
+
+**Run the new migration before opening the upgraded app:** Supabase SQL Editor → paste `database/004_phase45.sql` → Run. Do not rerun or delete older tables. This adds `business_products` (protected by user-specific RLS policies) and the optional `content_brief` JSON column on existing `content_posts`; it does not delete existing businesses, research or posts.
+
+**Add product URLs:** Businesses → expand a saved business → Product and service URLs → enter one item per line, e.g. `IconACS | https://example.org/products/iconacs`, then **Add product/service URLs**. Add as many as needed in separate batches. URLs must be publicly reachable HTTP(S) addresses; private and local networks are blocked by the crawler. The existing single `product_url` field remains for backward compatibility.
+
+**Research each product:** Website Research → select the business → choose a product URL → **Analyze selected product page**. The crawler reads at most one HTML page per click, checks robots.txt and applies request/time/size restrictions. It does not access private pages or automatically bypass blocked websites. Review the extracted title, meta description and headings. **Approve this product research for content planning** only when you have verified the information. Re-analyzing clears approval until reviewed again. The original source URL is retained.
+
+**Generate multi-format content:** Content Calendar → choose business, platforms, posting frequency and any combination of the ten content formats → Generate monthly draft calendar. Approved product research is prioritized over broad website research. Each post includes a structured `content_brief`: slide-by-slide carousel outlines, infographic sections, video scenes and voiceover suggestions, poll options, story frames, document outlines, or image direction. Edit these briefs as JSON before or after saving; download them in CSV. The existing Creative Studio remains focused on static artwork; it does not render final videos or carousel pages automatically.
+
+**Cost:** All new content generation is deterministic and does not call a paid AI API. Public site crawling consumes network resources and can fail due to robots.txt, firewalls, or hosting limits. No guarantee of unlimited crawling on free hosting.
+
+**Testing:** Run `python -m pytest -q` in the repository. The Cloudflare integration and Streamlit secrets remain unchanged.

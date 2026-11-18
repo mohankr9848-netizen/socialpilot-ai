@@ -389,9 +389,9 @@ elif section == 'Content Calendar':
         st.dataframe([{'Source': item['source'], 'Extracted topic': item['topic']} for item in sources], hide_index=True, use_container_width=True)
         st.caption('Source phrases are planning inputs, not independently verified product claims. To improve topics, edit product positioning and content opportunities in Website Research.')
     else:
-        st.warning('No specific topics found. Add detailed product features, use cases and customer problems in Businesses or approved Website Research before generating.')
+        st.warning('No usable, specific research topics found for this selection. Approve a product page with concrete features or workflows (for example, TR-069 provisioning or subscriber billing), or add these details to approved Business Research. Generic website slogans are intentionally excluded.')
     draft_key = f'calendar_drafts_{business_id}_{year}_{month}'
-    if st.button('Generate monthly draft calendar', type='primary'):
+    if st.button('Generate monthly draft calendar', type='primary', disabled=not bool(sources)):
         try:
             st.session_state[draft_key] = make_plan(business, scoped_research, int(year), int(month), platforms, frequency, hour, products=scoped_products, selected_formats=selected_formats, product_only=(scope == 'Selected products / services'))
             st.success('Draft calendar generated. Review before saving.')
@@ -440,6 +440,7 @@ elif section == 'Content Calendar':
         st.stop()
     st.markdown(f'#### Saved posts — {calendar.month_name[int(month)]} {year} ({len(posts)})')
     if posts:
+        st.caption('These are previously saved posts. Updating the planner does not automatically rewrite existing drafts; generate and review new drafts to see improved titles.')
         st.dataframe([{'Date':p['scheduled_date'],'Time':p['scheduled_time'],'Platform':p['platform'],'Format':p['content_type'],'Title':p['title'],'Product':(p.get('content_brief') or {}).get('product',''), 'Status':p['status']} for p in posts], hide_index=True, use_container_width=True)
         csv_fields = ['scheduled_date','scheduled_time','platform','content_type','content_pillar','category','title','caption','hashtags','cta','graphic_prompt','content_brief','status']
         stream = StringIO()

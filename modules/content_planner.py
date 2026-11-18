@@ -36,13 +36,31 @@ def _items(value):
     return [_clean(p) for p in re.split(r'[\n;|•]+', str(value or '')) if _clean(p)]
 
 
+VAGUE = ('connects to the priorities', 'intended audience', 'impact we bring',
+         'verticals we cater', 'simplifying the complexity', 'insights that power',
+         'transforming isp operations', 'product education', 'industry insights',
+         'get in touch', 'our solutions', 'why choose us', 'learn more',
+         'comprehensive isp management suite', 'about us', 'our mission',
+         'home page', 'request a demo', 'contact us', 'case studies',
+         'frequently asked questions', 'explore our', 'discover our')
+DOMAIN = ('billing', 'subscriber', 'provision', 'tr-069', 'firmware', 'router',
+          'network', 'fiber', 'fibre', 'olt', 'onu', 'crm', 'aaa', 'radius',
+          'customer support', 'helpdesk', 'ticket', 'payment', 'revenue',
+          'inventory', 'gis', 'monitor', 'fault', 'automation', 'bng',
+          'broadband', 'wifi', 'wi-fi', 'authentication', 'bandwidth',
+          'configuration', 'device management', 'field service', 'ipdr',
+          'session management', 'diagnos', 'service activation', 'acs',
+          'capacity', 'route planning', 'usage', 'reseller', 'collection')
+
 def _specific(value):
     value = _clean(value)
-    if not 5 <= len(value) <= 145 or value.casefold() in GENERIC:
+    low = value.casefold()
+    if not 8 <= len(value) <= 125 or low in GENERIC or any(v in low for v in VAGUE):
         return False
-    words = re.findall(r'[\w-]+', value.lower())
-    return len(words) >= 2 and any(w not in STOP and len(w) >= 3 for w in words)
-
+    if not any(term in low for term in DOMAIN):
+        return False
+    words = re.findall(r'[\w-]+', low)
+    return 2 <= len(words) <= 17 and any(w not in STOP and len(w) >= 3 for w in words)
 
 def _phrases(value):
     """Extract meaningful phrases without presenting prose as an invented product name."""
@@ -78,71 +96,76 @@ def _dedupe(values, limit=30):
 def _source_topics(business, research):
     suggestions = (research or {}).get('suggestions') or {}
     facts = (research or {}).get('facts') or {}
-    # Website headings and edited product positioning take precedence over generic pillars.
+    # Curated descriptions and features outrank raw site navigation and SEO titles.
     inputs = [
+        ('Product positioning', suggestions.get('product_positioning')),
+        ('Customer pain point', suggestions.get('customer_pain_points')),
+        ('Content opportunity', suggestions.get('content_opportunities')),
+        ('Business product description', business.get('product_description')),
+        ('Unique selling proposition', suggestions.get('unique_selling_propositions')),
+        ('Content pillar', suggestions.get('content_pillars')),
         ('Website heading', facts.get('website_headings')),
         ('Website page title', facts.get('page_titles')),
-        ('Website description', facts.get('website_descriptions')),
-        ('Product positioning', suggestions.get('product_positioning')),
-        ('Business product description', business.get('product_description')),
-        ('Content opportunity', suggestions.get('content_opportunities')),
-        ('Customer pain point', suggestions.get('customer_pain_points')),
-        ('Unique selling proposition', suggestions.get('unique_selling_propositions')),
-        ('Business description', business.get('description')),
-        ('Content pillar', suggestions.get('content_pillars')),
     ]
-    candidates = []
+    result = []
     for source, raw in inputs:
         for phrase in _phrases(raw):
-            # Discard website navigation and boilerplate.
-            if phrase.casefold() in GENERIC or re.fullmatch(r'(home|about us|contact us|blog|privacy policy)', phrase, re.I):
-                continue
-            candidates.append({'topic': phrase, 'source': source})
-    unique, seen = [], set()
-    for item in candidates:
+            result.append({'topic': phrase, 'source': source})
+    return _dedupe_topics(result)
+
+
+def _dedupe_topics(items):
+    result, seen = [], set()
+    for item in items:
         key = re.sub(r'[^a-z0-9]+', '', item['topic'].casefold())
-        if key not in seen:
+        if key and key not in seen:
             seen.add(key)
-            unique.append(item)
-    return unique[:60]
+            result.append(item)
+    return result[:60]
 
 
 def _audiences(business, research):
     suggestions = (research or {}).get('suggestions') or {}
-    audience = _items(suggestions.get('target_audience')) or _items(business.get('audience'))
-    audience = _dedupe([a for a in audience if len(a) <= 110], 12)
-    return audience or ['the intended audience']
+    raw = suggestions.get('target_audience') or business.get('audience') or ''
+    parts = []
+    for value in _items(raw):
+        parts.extend(x.strip() for x in value.split(',') if x.strip())
+    return _dedupe([x for x in parts if 4 <= len(x) <= 65], 12)
+
+
+def _subject(topic):
+    topic = _clean(topic).rstrip('.!?')
+    # Avoid copying a complete SEO title into another sentence.
+    topic = re.split(r'\s+[|–—]\s+', topic)[0].strip()
+    topic = re.sub(r'^(?:How|Why|What|Where|When)\s+', '', topic, flags=re.I)
+    topic = re.sub(r'^(?:a|an|the)\s+', '', topic, flags=re.I)
+    return topic[:95].rstrip(' :-')
 
 
 def _title(topic, audience, angle):
+    subject = _subject(topic)
     if angle == 0:
-        return f'How {topic} connects to the priorities of {audience}'
+        return f'{subject}: How It Works'
     if angle == 1:
-        return f'What {audience} should evaluate about {topic}'
+        return f'{subject}: Key Questions for {audience}' if audience else f'{subject}: Key Questions to Ask'
     if angle == 2:
-        return f'3 questions to ask before adopting {topic}'
+        return f'{subject}: A Practical Checklist'
     if angle == 3:
-        return f'{topic}: a practical workflow checklist'
+        return f'{subject}: From Setup to Daily Operations'
     if angle == 4:
-        return f'Common implementation challenges around {topic}'
-    return f'Where {topic} fits into a broader operating strategy'
+        return f'{subject}: Common Operational Challenges'
+    return f'{subject}: What Teams Should Evaluate'
 
 
 def _caption(title, topic, audience, category, business_name):
-    openings = {
-        'Audience insight': f'For {audience}, a useful starting point is understanding how {topic} affects day-to-day work.',
-        'Evaluation': f'Before investing in {topic}, teams should clarify their requirements and operational constraints.',
-        'Decision checklist': f'Considering {topic}? Ask who owns the process, what needs to integrate, and how success will be measured.',
-        'Workflow': f'A practical way to examine {topic} is to map the current workflow, identify handoffs, and document gaps.',
-        'Challenges': f'When teams work with {topic}, unclear ownership, disconnected information, and manual steps may create friction.',
-        'Strategy': f'{topic} deserves a place in the conversation about operational priorities and long-term planning.',
-    }
-    return (f'{title}\n\n{openings[category]}\n\n'
-            'Suggested discussion points:\n'
-            '• Identify the current process and its biggest friction point.\n'
-            '• Evaluate the requirements and stakeholders involved.\n'
-            '• Define what a measurable improvement would look like.\n\n'
-            f'What would you add to this checklist?\n\n— {business_name}\n\n'
+    audience_text = f'For {audience}, ' if audience else ''
+    return (f'{title}\n\n{audience_text.lower() if audience_text else ""}'
+            f'this post explores {topic.rstrip(".!?")} using the approved source material.\n\n'
+            'Suggested editorial points:\n'
+            '• Explain the actual workflow or capability described in the source.\n'
+            '• Highlight a relevant operational question or challenge.\n'
+            '• Include a practical consideration for evaluating the approach.\n\n'
+            f'— {business_name}\n\n'
             '[Editorial review: verify product capabilities, examples and claims before publishing.]')
 
 
@@ -175,10 +198,8 @@ def make_plan(business, research, year, month, platforms, posts_per_week=3, star
     if not 0 <= int(start_hour) <= 23:
         raise ValueError('Invalid posting hour.')
     from modules.product_intelligence import product_topics
-    product_candidates = product_topics(products or [])
-    topics = product_candidates if product_only else product_candidates + _source_topics(business, research)
-    seen_topics = set()
-    topics = [t for t in topics if not (t['topic'].casefold() in seen_topics or seen_topics.add(t['topic'].casefold()))]
+    product_candidates = [t for t in product_topics(products or []) if _specific(t['topic'])]
+    topics = _dedupe_topics(product_candidates if product_only else product_candidates + _source_topics(business, research))
     if not topics:
         raise ValueError('No specific product or website topics found. Add product names, features, use cases, or customer problems under Businesses / Website Research, approve the research, and try again.')
     audiences = _audiences(business, research)
@@ -198,7 +219,7 @@ def make_plan(business, research, year, month, platforms, posts_per_week=3, star
         # Rotate the topic list and audience independently to vary perspectives.
         item = topics[i % len(topics)]
         topic = item['topic']
-        audience = audiences[(i // max(1, len(topics))) % len(audiences)]
+        audience = audiences[(i // max(1, len(topics))) % len(audiences)] if audiences else ''
         category = categories[(i // max(1, len(topics))) % len(categories)]
         angle = (i // max(1, len(topics))) % len(categories)
         title = _title(topic, audience, angle)
@@ -228,4 +249,4 @@ def make_plan(business, research, year, month, platforms, posts_per_week=3, star
 def topic_sources(business, research, limit=20, products=None):
     """Preview the exact source phrases used for planning."""
     from modules.product_intelligence import product_topics
-    return (product_topics(products or []) + _source_topics(business, research))[:limit]
+    return _dedupe_topics([t for t in product_topics(products or []) if _specific(t['topic'])] + _source_topics(business, research))[:limit]

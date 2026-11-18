@@ -143,3 +143,9 @@ For privacy, remember that prompts (business descriptions, post title, and creat
 **Cost:** All new content generation is deterministic and does not call a paid AI API. Public site crawling consumes network resources and can fail due to robots.txt, firewalls, or hosting limits. No guarantee of unlimited crawling on free hosting.
 
 **Testing:** Run `python -m pytest -q` in the repository. The Cloudflare integration and Streamlit secrets remain unchanged.
+
+## Phase 4.6 — Unified marketing workflow
+
+The Website Research page now separates **Business website** from **Individual products / services**. Product pages must be crawled and approved separately. The Content Calendar offers three source scopes: selected approved products, all approved products plus business research, or business research only. In the selected-products scope, only product source phrases are used for topics (no business-topic fallback). Saved content briefs retain product name, audience and source URL. The Creative Studio displays these references and a format-specific production brief before showing its single-image renderer. Videos and multi-slide posts are *briefs*, not finished rendered assets.
+
+**Deployment:** No new SQL migration is needed if `database/004_phase45.sql` was already run. This update only changes app UI, the planner function, and adds a small presentation helper. Existing business, research and post records remain unchanged. Previously saved posts may lack source links; regenerate and save posts from approved research to populate them. Source claims still require human verification.

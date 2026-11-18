@@ -11,15 +11,15 @@ RESEARCH = {'suggestions':{'content_pillars':'Product education\nIndustry insigh
 
 def test_business_specific_topics_override_generic_pillars():
     topics = topic_sources(BUSINESS, RESEARCH)
-    assert topics[0]['topic'] == 'Centralized AAA and subscriber billing'
+    assert topics[0]['topic'] == 'Zero-touch provisioning for customer routers'
     assert all(x['topic'] != 'Product education' for x in topics)
 
 def test_deterministic_and_database_compatible():
     a = make_plan(BUSINESS, RESEARCH, 2026, 11, ['LinkedIn','Instagram'], 3)
     assert a == make_plan(BUSINESS, RESEARCH, 2026, 11, ['LinkedIn','Instagram'], 3)
     assert len(a) == 14
-    assert 'subscriber billing' in a[0]['title']
-    assert 'ISP CTOs' in a[0]['title']
+    assert 'Zero-touch provisioning' in a[0]['title']
+    assert 'How It Works' in a[0]['title']
     assert all(set(p) == {'scheduled_date','scheduled_time','platform','content_type','content_pillar','category','title','caption','hashtags','cta','graphic_prompt','content_brief','status'} for p in a)
     assert all('Editorial review' in p['caption'] for p in a)
 

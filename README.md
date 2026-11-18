@@ -149,3 +149,8 @@ For privacy, remember that prompts (business descriptions, post title, and creat
 The Website Research page now separates **Business website** from **Individual products / services**. Product pages must be crawled and approved separately. The Content Calendar offers three source scopes: selected approved products, all approved products plus business research, or business research only. In the selected-products scope, only product source phrases are used for topics (no business-topic fallback). Saved content briefs retain product name, audience and source URL. The Creative Studio displays these references and a format-specific production brief before showing its single-image renderer. Videos and multi-slide posts are *briefs*, not finished rendered assets.
 
 **Deployment:** No new SQL migration is needed if `database/004_phase45.sql` was already run. This update only changes app UI, the planner function, and adds a small presentation helper. Existing business, research and post records remain unchanged. Previously saved posts may lack source links; regenerate and save posts from approved research to populate them. Source claims still require human verification.
+
+
+## Phase 4.6.1 — Topic quality safeguards
+
+The calendar now prioritizes concrete product features and workflows over website navigation headings, filters vague marketing slogans, and never uses the placeholder phrase “the intended audience.” If no usable topics remain, generation is disabled until approved research is improved. Previously saved posts are not rewritten. This is a deterministic template engine, not a generative language model; review titles and captions before publishing.

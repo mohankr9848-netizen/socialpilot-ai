@@ -78,7 +78,9 @@ if section == 'Dashboard':
 elif section == 'Businesses':
     from modules.product_intelligence import parse_product_lines
     st.subheader('Business profiles')
-    st.caption('After creating a business, expand its profile to add any number of product/service URLs.')
+    if st.session_state.pop('new_business_saved_message', None):
+        st.success('Business and product/service URLs saved successfully.')
+    st.caption('Add product/service URLs while creating a business, or manage them later in an existing profile.')
     with st.expander('Add a new business', expanded=not bool(businesses)):
         with st.form('new_business'):
             name = st.text_input('Business name')
@@ -91,7 +93,15 @@ elif section == 'Businesses':
             market = st.text_input('Geographic market')
             voice = st.selectbox('Brand voice', ['Professional', 'Friendly', 'Bold', 'Educational'])
             logo = st.file_uploader('Logo (PNG, JPG, WEBP; up to 2 MB)', type=['png', 'jpg', 'jpeg', 'webp'])
-            save = st.form_submit_button('Save business')
+            st.markdown('#### Product and service URLs')
+            st.caption('Optional. Add as many URLs as you need, one per line: Product name | https://example.com/product')
+            new_product_lines = st.text_area(
+                'Product / service names and URLs',
+                placeholder='IconRadius | https://example.com/iconradius\nIconACS | https://example.com/iconacs',
+                height=125,
+                key='new_business_product_urls',
+            )
+            save = st.form_submit_button('Save business & product URLs')
         if save:
             if not name.strip():
                 st.error('Business name is required.')
@@ -99,6 +109,9 @@ elif section == 'Businesses':
                 st.error('Website must begin with https:// or http://')
             else:
                 try:
+                    # Validate all URLs before creating the business, avoiding partial
+                    # records when an invalid URL is entered.
+                    product_entries = parse_product_lines(new_product_lines)
                     colors = ['#24468F', '#C62229']
                     logo_bytes = None
                     if logo:
@@ -115,7 +128,23 @@ elif section == 'Businesses':
                         path = f'{user_id}/{created["id"]}.{ext}'
                         db.storage.from_('brand-logos').upload(path, logo_bytes, {'content-type': logo.type, 'upsert': 'true'})
                         db.table('businesses').update({'logo_path': path}).eq('id', created['id']).execute()
-                    st.success('Business saved!')
+                    if product_entries:
+                        product_records = [
+                            {'user_id': user_id, 'business_id': created['id'], **entry}
+                            for entry in product_entries
+                        ]
+                        try:
+                            db.table('business_products').insert(product_records).execute()
+                        except Exception as product_exc:
+                            st.error(
+                                'Business created, but product/service URLs could not be saved. '
+                                'Open the new business profile to add them again. '
+                                f'Details: {product_exc}'
+                            )
+                            st.stop()
+                    st.session_state['new_business_saved_message'] = (
+                        f'Business saved with {len(product_entries)} product/service URL(s).'
+                    )
                     st.rerun()
                 except Exception as e:
                     st.error(f'Could not save business: {e}')

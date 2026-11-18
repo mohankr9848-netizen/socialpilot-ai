@@ -20,7 +20,7 @@ def test_deterministic_and_database_compatible():
     assert len(a) == 14
     assert 'subscriber billing' in a[0]['title']
     assert 'ISP CTOs' in a[0]['title']
-    assert all(set(p) == {'scheduled_date','scheduled_time','platform','content_type','content_pillar','category','title','caption','hashtags','cta','graphic_prompt','status'} for p in a)
+    assert all(set(p) == {'scheduled_date','scheduled_time','platform','content_type','content_pillar','category','title','caption','hashtags','cta','graphic_prompt','content_brief','status'} for p in a)
     assert all('Editorial review' in p['caption'] for p in a)
 
 def test_business_only_still_works():

@@ -160,7 +160,7 @@ def _hashtags(topic, business):
     return ' '.join(_dedupe(tags, 5)) or '#BusinessStrategy'
 
 
-def make_plan(business, research, year, month, platforms, posts_per_week=3, start_hour=10, products=None, selected_formats=None):
+def make_plan(business, research, year, month, platforms, posts_per_week=3, start_hour=10, products=None, selected_formats=None, product_only=False):
     """Return drafts compatible with the existing Phase 3 content_posts table.
 
     If no specific business evidence exists, raise a useful error rather than
@@ -176,7 +176,7 @@ def make_plan(business, research, year, month, platforms, posts_per_week=3, star
         raise ValueError('Invalid posting hour.')
     from modules.product_intelligence import product_topics
     product_candidates = product_topics(products or [])
-    topics = product_candidates + _source_topics(business, research)
+    topics = product_candidates if product_only else product_candidates + _source_topics(business, research)
     seen_topics = set()
     topics = [t for t in topics if not (t['topic'].casefold() in seen_topics or seen_topics.add(t['topic'].casefold()))]
     if not topics:

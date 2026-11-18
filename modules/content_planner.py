@@ -8,7 +8,8 @@ import calendar
 import re
 
 PLATFORMS = ('LinkedIn', 'Instagram', 'Facebook', 'X')
-FORMATS = ('Single image', 'Carousel', 'Text', 'Infographic', 'Short video')
+from modules.format_briefs import FORMATS, choose_format, make_brief
+
 GENERIC = {'product education', 'industry insights', 'customer challenges', 'practical tips',
            'business operations', 'customer experience', 'team productivity',
            'product features', 'thought leadership', 'brand awareness', 'tips',
@@ -159,7 +160,7 @@ def _hashtags(topic, business):
     return ' '.join(_dedupe(tags, 5)) or '#BusinessStrategy'
 
 
-def make_plan(business, research, year, month, platforms, posts_per_week=3, start_hour=10):
+def make_plan(business, research, year, month, platforms, posts_per_week=3, start_hour=10, products=None, selected_formats=None):
     """Return drafts compatible with the existing Phase 3 content_posts table.
 
     If no specific business evidence exists, raise a useful error rather than
@@ -173,7 +174,11 @@ def make_plan(business, research, year, month, platforms, posts_per_week=3, star
         raise ValueError('Invalid month.')
     if not 0 <= int(start_hour) <= 23:
         raise ValueError('Invalid posting hour.')
-    topics = _source_topics(business, research)
+    from modules.product_intelligence import product_topics
+    product_candidates = product_topics(products or [])
+    topics = product_candidates + _source_topics(business, research)
+    seen_topics = set()
+    topics = [t for t in topics if not (t['topic'].casefold() in seen_topics or seen_topics.add(t['topic'].casefold()))]
     if not topics:
         raise ValueError('No specific product or website topics found. Add product names, features, use cases, or customer problems under Businesses / Website Research, approve the research, and try again.')
     audiences = _audiences(business, research)
@@ -198,7 +203,7 @@ def make_plan(business, research, year, month, platforms, posts_per_week=3, star
         angle = (i // max(1, len(topics))) % len(categories)
         title = _title(topic, audience, angle)
         platform = platforms[i % len(platforms)]
-        fmt = FORMATS[i % len(FORMATS)]
+        fmt = choose_format(i, platform, selected_formats)
         graphic_prompt = (
             f'Design a professional {fmt.lower()} for {platform} about: "{title}". '
             f'Business: {name}. Intended audience: {audience}. '
@@ -215,11 +220,12 @@ def make_plan(business, research, year, month, platforms, posts_per_week=3, star
             'category': category, 'title': title,
             'caption': _caption(title, topic, audience, category, name),
             'hashtags': _hashtags(topic, business), 'cta': 'Share your perspective',
-            'graphic_prompt': graphic_prompt, 'status': 'draft'
+            'graphic_prompt': graphic_prompt, 'content_brief': make_brief(fmt, title, topic, audience, item.get('product',''), item.get('source_url','')), 'status': 'draft'
         })
     return result
 
 
-def topic_sources(business, research, limit=20):
+def topic_sources(business, research, limit=20, products=None):
     """Preview the exact source phrases used for planning."""
-    return _source_topics(business, research)[:limit]
+    from modules.product_intelligence import product_topics
+    return (product_topics(products or []) + _source_topics(business, research))[:limit]

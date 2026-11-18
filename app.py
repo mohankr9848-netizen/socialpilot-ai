@@ -220,109 +220,117 @@ elif section == 'Website Research':
     business_map = {b['id']: b for b in businesses}
     business_id = st.selectbox('Choose business', list(business_map), format_func=lambda key: business_map[key]['name'])
     business = business_map[business_id]
-    research_url = st.text_input('Website to research', value=business.get('website') or '', key='research_url_' + business_id)
-    max_pages = st.slider('Maximum pages to inspect', 1, 8, 4)
-    if st.button('Analyze Website', type='primary'):
-        if not research_url.strip():
-            st.error('Enter a public website URL. Add https:// at the beginning.')
-        else:
-            with st.spinner('Reading accessible public pages...'):
-                try:
-                    crawl = crawl_website(research_url, max_pages)
-                    report = get_provider().generate(business, crawl)
-                    st.session_state['research_draft_' + business_id] = {'website': research_url, **report}
-                    if not crawl['pages']:
-                        st.warning('No accessible pages found. You can still edit the research using the saved business details.')
-                    else:
-                        st.success(f"Read {len(crawl['pages'])} page(s). Review the report before saving.")
-                except Exception as exc:
-                    st.error(f'Website research could not complete: {exc}')
-                    st.info('You can use your existing business details by clicking Generate from saved business details below.')
-    st.markdown('#### Product and service page research')
-    st.caption('Crawl one selected product URL at a time (one public HTML page). Review extracted information before approving it for calendar topics.')
-    try:
-        product_rows = db.table('business_products').select('*').eq('business_id',business_id).eq('user_id',user_id).order('created_at').execute().data
-    except Exception:
-        product_rows = []
-        st.warning('Product research requires database/004_phase45.sql in Supabase.')
-    if product_rows:
-        selected_product = st.selectbox('Product/service to analyze', product_rows, format_func=lambda p: f"{p['name']} — {p['url']}", key='research_product')
-        if st.button('Analyze selected product page'):
-            from modules.product_intelligence import crawl_product
-            try:
-                with st.spinner('Reading the public product page...'):
-                    facts = crawl_product(selected_product)
-                    db.table('business_products').update({'facts': facts, 'approved': False}).eq('id',selected_product['id']).eq('user_id',user_id).execute()
-                st.success('Product page analyzed. Review the extracted facts below and approve separately.')
-                st.rerun()
-            except Exception as exc:
-                st.error(f'Could not analyze product URL: {exc}')
-        facts = selected_product.get('facts') or {}
-        if facts:
-            st.write('Extracted source:', facts.get('source_url') or selected_product['url'])
-            st.write('Page title:', facts.get('title') or '(not found)')
-            st.write('Description:', facts.get('description') or '(not found)')
-            st.write('Headings:', facts.get('headings') or [])
-            for warning in facts.get('warnings', []):
-                st.warning(warning)
-            if st.button('Approve this product research for content planning', key='approve_prod_'+selected_product['id'], disabled=not bool(facts.get('source_url'))):
-                db.table('business_products').update({'approved':True}).eq('id',selected_product['id']).eq('user_id',user_id).execute()
-                st.success('Product research approved.')
-                st.rerun()
-            if selected_product.get('approved'):
-                st.success('This product research is approved for calendar topics.')
-    if st.button('Generate from saved business details'):
-        st.session_state['research_draft_' + business_id] = {'website': research_url, **get_provider().generate(business, {'pages': [], 'warnings': ['No website pages were analyzed.']})}
-    try:
-        stored_rows = db.table('business_research').select('*').eq('business_id', business_id).eq('user_id', user_id).limit(1).execute().data
-    except Exception:
-        st.error('Research table unavailable. Run database/002_phase2.sql in Supabase SQL Editor first.')
-        st.stop()
-
-    stored = stored_rows[0] if stored_rows else None
-
-    if st.session_state.pop('research_saved_' + business_id, False):
-        st.success('Research profile saved successfully to Supabase!')
-
-    draft = st.session_state.get('research_draft_' + business_id)
-    if draft is None and stored:
-        draft = {'website': stored['website'], 'facts': stored['facts'], 'suggestions': stored['suggestions'], 'warnings': stored.get('warnings') or []}
-    if draft:
-        st.markdown('#### Verified source material')
-        st.caption('These are extracted snippets and URLs, not independently verified claims. Check the source pages.')
-        facts = draft.get('facts', {})
-        st.write('Pages:', ', '.join(facts.get('source_urls', [])) or 'None (manual business profile only)')
-        with st.expander('Website headings, titles and descriptions'):
-            st.json(facts)
-        for warning in draft.get('warnings', []):
-            st.warning(str(warning))
-        st.markdown('#### Editable business intelligence profile')
-        st.caption('Draft suggestions are not verified facts. Edit and approve them before using them in future content.')
-        fields = [('business_overview', 'Business overview'), ('target_audience', 'Target audience'),
-                  ('product_positioning', 'Product positioning'), ('unique_selling_propositions', 'Unique selling propositions'),
-                  ('customer_pain_points', 'Customer pain points'), ('content_opportunities', 'Content opportunities'),
-                  ('content_pillars', 'Recommended content pillars'), ('social_strategy', 'Suggested social strategy')]
-        with st.form('research_edit_' + business_id):
-            edits = {}
-            for key, label in fields:
-                edits[key] = st.text_area(label, value=draft.get('suggestions', {}).get(key, ''), height=90)
-            approve = st.checkbox('I have reviewed this profile and approve it for future content planning', value=bool(stored and stored.get('approved')))
-            save_research = st.form_submit_button('Save research profile')
-        if save_research:
-            record = {'user_id': user_id, 'business_id': business_id, 'website': draft['website'],
-                      'facts': facts, 'suggestions': edits, 'warnings': draft.get('warnings', []), 'approved': approve}
-            try:
-                if stored:
-                    db.table('business_research').update(record).eq('id', stored['id']).eq('user_id', user_id).execute()
-                else:
-                    db.table('business_research').insert(record).execute()
-                st.session_state.pop('research_draft_' + business_id, None)
-                st.session_state['research_saved_' + business_id] = True
-                st.rerun()
-            except Exception as exc:
-                st.error(f'Could not save research profile: {exc}')
+    research_view = st.radio('Research level', ['Business website', 'Individual products / services'], horizontal=True, key='research_level')
+    if research_view == 'Business website':
+        st.info('Company-wide research. Save and approve the business profile below before using it in content planning.')
     else:
-        st.info('Choose a business and analyze its website, or generate a profile from saved business details.')
+        st.info('Product-specific research. Select a saved product, crawl its URL, review source details, and approve it independently.')
+    if research_view == 'Business website':
+        research_url = st.text_input('Website to research', value=business.get('website') or '', key='research_url_' + business_id)
+        max_pages = st.slider('Maximum pages to inspect', 1, 8, 4)
+        if st.button('Analyze Website', type='primary'):
+            if not research_url.strip():
+                st.error('Enter a public website URL. Add https:// at the beginning.')
+            else:
+                with st.spinner('Reading accessible public pages...'):
+                    try:
+                        crawl = crawl_website(research_url, max_pages)
+                        report = get_provider().generate(business, crawl)
+                        st.session_state['research_draft_' + business_id] = {'website': research_url, **report}
+                        if not crawl['pages']:
+                            st.warning('No accessible pages found. You can still edit the research using the saved business details.')
+                        else:
+                            st.success(f"Read {len(crawl['pages'])} page(s). Review the report before saving.")
+                    except Exception as exc:
+                        st.error(f'Website research could not complete: {exc}')
+                        st.info('You can use your existing business details by clicking Generate from saved business details below.')
+    if research_view == 'Individual products / services':
+        st.markdown('#### Product and service page research')
+        st.caption('Crawl one selected product URL at a time (one public HTML page). Review extracted information before approving it for calendar topics.')
+        try:
+            product_rows = db.table('business_products').select('*').eq('business_id',business_id).eq('user_id',user_id).order('created_at').execute().data
+        except Exception:
+            product_rows = []
+            st.warning('Product research requires database/004_phase45.sql in Supabase.')
+        if product_rows:
+            selected_product = st.selectbox('Product/service to analyze', product_rows, format_func=lambda p: f"{p['name']} — {p['url']}", key='research_product')
+            if st.button('Analyze selected product page'):
+                from modules.product_intelligence import crawl_product
+                try:
+                    with st.spinner('Reading the public product page...'):
+                        facts = crawl_product(selected_product)
+                        db.table('business_products').update({'facts': facts, 'approved': False}).eq('id',selected_product['id']).eq('user_id',user_id).execute()
+                    st.success('Product page analyzed. Review the extracted facts below and approve separately.')
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f'Could not analyze product URL: {exc}')
+            facts = selected_product.get('facts') or {}
+            if facts:
+                st.write('Extracted source:', facts.get('source_url') or selected_product['url'])
+                st.write('Page title:', facts.get('title') or '(not found)')
+                st.write('Description:', facts.get('description') or '(not found)')
+                st.write('Headings:', facts.get('headings') or [])
+                for warning in facts.get('warnings', []):
+                    st.warning(warning)
+                if st.button('Approve this product research for content planning', key='approve_prod_'+selected_product['id'], disabled=not bool(facts.get('source_url'))):
+                    db.table('business_products').update({'approved':True}).eq('id',selected_product['id']).eq('user_id',user_id).execute()
+                    st.success('Product research approved.')
+                    st.rerun()
+                if selected_product.get('approved'):
+                    st.success('This product research is approved for calendar topics.')
+    if research_view == 'Business website':
+        if st.button('Generate from saved business details'):
+            st.session_state['research_draft_' + business_id] = {'website': research_url, **get_provider().generate(business, {'pages': [], 'warnings': ['No website pages were analyzed.']})}
+        try:
+            stored_rows = db.table('business_research').select('*').eq('business_id', business_id).eq('user_id', user_id).limit(1).execute().data
+        except Exception:
+            st.error('Research table unavailable. Run database/002_phase2.sql in Supabase SQL Editor first.')
+            st.stop()
+
+        stored = stored_rows[0] if stored_rows else None
+
+        if st.session_state.pop('research_saved_' + business_id, False):
+            st.success('Research profile saved successfully to Supabase!')
+
+        draft = st.session_state.get('research_draft_' + business_id)
+        if draft is None and stored:
+            draft = {'website': stored['website'], 'facts': stored['facts'], 'suggestions': stored['suggestions'], 'warnings': stored.get('warnings') or []}
+        if draft:
+            st.markdown('#### Verified source material')
+            st.caption('These are extracted snippets and URLs, not independently verified claims. Check the source pages.')
+            facts = draft.get('facts', {})
+            st.write('Pages:', ', '.join(facts.get('source_urls', [])) or 'None (manual business profile only)')
+            with st.expander('Website headings, titles and descriptions'):
+                st.json(facts)
+            for warning in draft.get('warnings', []):
+                st.warning(str(warning))
+            st.markdown('#### Editable business intelligence profile')
+            st.caption('Draft suggestions are not verified facts. Edit and approve them before using them in future content.')
+            fields = [('business_overview', 'Business overview'), ('target_audience', 'Target audience'),
+                      ('product_positioning', 'Product positioning'), ('unique_selling_propositions', 'Unique selling propositions'),
+                      ('customer_pain_points', 'Customer pain points'), ('content_opportunities', 'Content opportunities'),
+                      ('content_pillars', 'Recommended content pillars'), ('social_strategy', 'Suggested social strategy')]
+            with st.form('research_edit_' + business_id):
+                edits = {}
+                for key, label in fields:
+                    edits[key] = st.text_area(label, value=draft.get('suggestions', {}).get(key, ''), height=90)
+                approve = st.checkbox('I have reviewed this profile and approve it for future content planning', value=bool(stored and stored.get('approved')))
+                save_research = st.form_submit_button('Save research profile')
+            if save_research:
+                record = {'user_id': user_id, 'business_id': business_id, 'website': draft['website'],
+                          'facts': facts, 'suggestions': edits, 'warnings': draft.get('warnings', []), 'approved': approve}
+                try:
+                    if stored:
+                        db.table('business_research').update(record).eq('id', stored['id']).eq('user_id', user_id).execute()
+                    else:
+                        db.table('business_research').insert(record).execute()
+                    st.session_state.pop('research_draft_' + business_id, None)
+                    st.session_state['research_saved_' + business_id] = True
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f'Could not save research profile: {exc}')
+        else:
+            st.info('Choose a business and analyze its website, or generate a profile from saved business details.')
 elif section == 'Content Calendar':
     import calendar
     import csv
@@ -361,9 +369,21 @@ elif section == 'Content Calendar':
         approved_products = db.table('business_products').select('*').eq('business_id',business_id).eq('user_id',user_id).eq('approved',True).execute().data
     except Exception:
         approved_products = []
+    st.markdown('#### 1. Choose approved source material')
+    scope = st.radio('Content scope', ['Selected products / services', 'All approved products + business', 'Business research only'], horizontal=True)
     if approved_products:
-        st.success(f'Using {len(approved_products)} approved product/service research profiles.')
-    sources = topic_sources(business, research, products=approved_products)
+        st.success(f'{len(approved_products)} approved product/service research profiles are available.')
+    if scope == 'Selected products / services':
+        selected_ids = st.multiselect('Select products to feature', [p['id'] for p in approved_products], default=[p['id'] for p in approved_products], format_func=lambda pid: next((p['name'] for p in approved_products if p['id']==pid), pid))
+        scoped_products = [p for p in approved_products if p['id'] in selected_ids]
+        scoped_research = None
+        if not scoped_products:
+            st.warning('Approve and select at least one product in Website Research before generating product-specific posts.')
+    elif scope == 'Business research only':
+        scoped_products, scoped_research = [], research
+    else:
+        scoped_products, scoped_research = approved_products, research
+    sources = topic_sources(business, scoped_research, products=scoped_products)
     st.markdown('#### Specific topics identified from your business')
     if sources:
         st.dataframe([{'Source': item['source'], 'Extracted topic': item['topic']} for item in sources], hide_index=True, use_container_width=True)
@@ -373,14 +393,14 @@ elif section == 'Content Calendar':
     draft_key = f'calendar_drafts_{business_id}_{year}_{month}'
     if st.button('Generate monthly draft calendar', type='primary'):
         try:
-            st.session_state[draft_key] = make_plan(business, research, int(year), int(month), platforms, frequency, hour, products=approved_products, selected_formats=selected_formats)
+            st.session_state[draft_key] = make_plan(business, scoped_research, int(year), int(month), platforms, frequency, hour, products=scoped_products, selected_formats=selected_formats, product_only=(scope == 'Selected products / services'))
             st.success('Draft calendar generated. Review before saving.')
         except Exception as exc:
             st.error(f'Could not generate drafts: {exc}')
     drafts = st.session_state.get(draft_key, [])
     if drafts:
         st.markdown('#### Generated drafts (not saved yet)')
-        st.dataframe([{'Date':p['scheduled_date'],'Platform':p['platform'],'Topic':p['title'],'Format':p['content_type'], 'Product':(p.get('content_brief') or {}).get('product','')} for p in drafts], hide_index=True, use_container_width=True)
+        st.dataframe([{'Date':p['scheduled_date'],'Platform':p['platform'],'Topic':p['title'],'Format':p['content_type'], 'Product':(p.get('content_brief') or {}).get('product',''), 'Source URL':(p.get('content_brief') or {}).get('source_url','')} for p in drafts], hide_index=True, use_container_width=True)
         with st.expander('Review and edit generated drafts', expanded=False):
             for i, p in enumerate(drafts):
                 with st.form(f'draft_edit_{business_id}_{year}_{month}_{i}'):
@@ -420,7 +440,7 @@ elif section == 'Content Calendar':
         st.stop()
     st.markdown(f'#### Saved posts — {calendar.month_name[int(month)]} {year} ({len(posts)})')
     if posts:
-        st.dataframe([{'Date':p['scheduled_date'],'Time':p['scheduled_time'],'Platform':p['platform'],'Format':p['content_type'],'Title':p['title'],'Status':p['status']} for p in posts], hide_index=True, use_container_width=True)
+        st.dataframe([{'Date':p['scheduled_date'],'Time':p['scheduled_time'],'Platform':p['platform'],'Format':p['content_type'],'Title':p['title'],'Product':(p.get('content_brief') or {}).get('product',''), 'Status':p['status']} for p in posts], hide_index=True, use_container_width=True)
         csv_fields = ['scheduled_date','scheduled_time','platform','content_type','content_pillar','category','title','caption','hashtags','cta','graphic_prompt','content_brief','status']
         stream = StringIO()
         writer = csv.DictWriter(stream, fieldnames=csv_fields)
@@ -482,6 +502,21 @@ elif section == 'Creative Studio':
         st.info('Save at least one post in Content Calendar, then return to Creative Studio.')
         st.stop()
     post = st.selectbox('Choose a saved calendar post', saved_posts, format_func=lambda p: f"{p['scheduled_date']} · {p['platform']} · {p['title'][:70]}", key='studio_post')
+    from modules.unified_workflow import production_guidance, research_lineage
+    brief = post.get('content_brief') or {}
+    st.markdown('#### Selected content and source')
+    st.write('**Format:**', post.get('content_type', 'Single image'))
+    st.write('**Product / service:**', brief.get('product') or 'Business-level content')
+    if brief.get('source_url'):
+        st.write('**Approved source URL:**', brief['source_url'])
+    else:
+        st.caption('No product-specific URL attached to this saved post. Check its research provenance before publishing.')
+    st.write('**Audience:**', brief.get('audience') or 'Not specified')
+    st.info(production_guidance(post.get('content_type', 'Single image')))
+    if post.get('content_type') not in ('Single image',):
+        st.markdown('#### Format-specific production brief')
+        st.json(brief)
+        st.caption('The current graphic renderer produces one static PNG. Carousels, videos and document posts require multiple assets; use this production brief to create them. It does not automatically render video or complete carousels.')
     suggested_headline, suggested_subtitle = suggest_graphic_copy(post)
     left, right = st.columns(2)
     with left:
